@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screw Defect Detection - Continuous Live Inspection</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #061426;
+            color: white;
+            min-height: 100vh;
+        }
+
+        /* ================= HEADER ================= */
+        .header {
+            background: #0b1f38;
+            padding: 20px 15px;
+            text-align: center;
+            border-bottom: 1px solid #1d3b5d;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            color: #9fb3c8;
+            font-size: 14px;
+        }
+
+        /* ================= MAIN CONTAINER ================= */
+        .container {
+            width: 95%;
+            max-width: 1180px;
+            margin: 20px auto;
+        }
+
+        /* ================= ALERT BANNER ================= */
+        .alert-banner {
+            display: none;
+            background: #3b1620;
+            border: 1px solid #ff5c5c;
+            color: #ffd6d6;
+            padding: 14px 18px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .alert-banner button {
+            margin-top: 10px;
+            padding: 8px 14px;
+            font-size: 13px;
+            background: #ff5c5c;
+            color: #061426;
+            flex: none;
+            width: auto;
+        }
+
+        /* ================= STATUS ================= */
+        .status-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            background: #0b1f38;
+            padding: 14px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #1d3b5d;
+        }
+
+        .status-item {
+            font-size: 14px;
+        }
+
+        .online {
+            color: #39d98a;
+            font-weight: bold;
+        }
+
+        .offline {
+            color: #ff5c5c;
+            font-weight: bold;
+        }
+
+        .scanning-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: #0f2c4d;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            border: 1px solid #1f4b7a;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #39d98a;
+            animation: pulse 1.2s infinite;
+        }
+
+        .dot.paused {
+            background: #f0c75e;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.25); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* ================= MAIN GRID ================= */
+        .main {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+
+        /* ================= CARD ================= */
+        .card {
+            background: #0b1f38;
+            border: 1px solid #1d3b5d;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .card h2 {
+            font-size: 19px;
+        }
+
+        select {
+            background: #071a2e;
+            color: white;
+            border: 1px solid #1d3b5d;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 13px;
+            max-width: 220px;
+        }
+
+        /* ================= CAMERA ================= */
+        .camera-box {
+            width: 100%;
+            background: black;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: black;
+        }
+
+        #previewImg {
+            width: 100%;
+            height: auto;
+            display: none;
+            background: black;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        /* ================= BUTTONS ================= */
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            flex: 1;
+            min-width: 130px;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #145da0;
+            color: white;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #1b78c5;
+        }
+
+        button.pause {
+            background: #b5851d;
+        }
+
+        button.pause:hover {
+            background: #cf9a26;
+        }
+
+        button.switch {
+            background: #1f4e78;
+        }
+
+        button.stop {
+            background: #8b2635;
+        }
+
+        button.stop:hover {
+            background: #ad3043;
+        }
+
+        /* ================= RESULT ================= */
+        .result {
+            text-align: center;
+            padding: 25px 15px;
+            border-radius: 12px;
+            background: #071a2e;
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        .result.border-good {
+            border-color: #39d98a;
+        }
+
+        .result.border-defective {
+            border-color: #ff5c5c;
+        }
+
+        .result-title {
+            font-size: 27px;
+            font-weight: bold;
+            margin-bottom: 14px;
+        }
+
+        .good {
+            color: #39d98a;
+        }
+
+        .defective {
+            color: #ff5c5c;
+        }
+
+        .unknown {
+            color: #f0c75e;
+        }
+
+        .class-name {
+            font-size: 18px;
+            color: #c8d6e5;
+            margin-bottom: 10px;
+        }
+
+        .confidence {
+            font-size: 22px;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        .live-counts {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #163354;
+        }
+
+        .count-box {
+            text-align: center;
+        }
+
+        .count-num {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .count-label {
+            font-size: 12px;
+            color: #9fb3c8;
+            margin-top: 3px;
+        }
+
+        .info {
+            margin-top: 14px;
+            color: #a9bdd1;
+            font-size: 13px;
+        }
+
+        /* ================= INSTRUCTIONS ================= */
+        .instructions {
+            margin-top: 20px;
+            background: #0b1f38;
+            border: 1px solid #1d3b5d;
+            border-radius: 15px;
+            padding: 18px 20px;
+        }
+
+        .instructions h2 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .instructions li {
+            margin: 8px 0;
+            color: #c3d2e1;
+            margin-left: 20px;
+            font-size: 14px;
+        }
+
+        /* ================= FOOTER ================= */
+        .footer {
+            text-align: center;
+            color: #7890a8;
+            font-size: 13px;
+            margin: 22px 0;
+        }
+
+        /* ================= MOBILE ================= */
+        @media (max-width: 800px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+            .header h1 {
+                font-size: 22px;
+            }
+            .status-bar {
+                justify-content: center;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>🔩 Screw Defect Detection</h1>
+        <p>Continuous Real-Time AI Screw Inspection System</p>
+    </div>
+
+    <div class="container">
+
+        <!-- CAMERA / BROWSER ALERT BANNER -->
+        <div id="alertBanner" class="alert-banner">
+            <div id="alertText"></div>
+            <button id="openDirectBtn" style="display:none;" onclick="window.open(window.location.href, '_blank')">
+                ↗ Open Direct Fullscreen Link (Enable Camera)
+            </button>
+        </div>
+
+        <!-- SERVER & SCAN STATUS -->
+        <div class="status-bar">
+            <div class="status-item">
+                Server: <span id="serverStatus" class="online">Checking...</span>
+            </div>
+
+            <div class="status-item">
+                AI Model: <span id="modelStatus" class="online">Checking...</span>
+            </div>
+
+            <div class="scanning-badge">
+                <span id="scanDot" class="dot paused"></span>
+                <span id="scanStatusText">Camera Off</span>
+            </div>
+        </div>
+
+        <!-- MAIN GRID -->
+        <div class="main">
+
+            <!-- CAMERA CARD -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>📷 Live Continuous Camera</h2>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <select id="cameraSelect" style="display:none;" onchange="onCameraSelectChange()"></select>
+                        <span id="fpsLabel" style="color:#9fb3c8; font-size:13px;">0.0 FPS</span>
+                    </div>
+                </div>
+
+                <div class="camera-box">
+                    <video id="video" autoplay playsinline muted></video>
+                    <img id="previewImg" alt="Uploaded Screw Preview" />
+                    <canvas id="overlay"></canvas>
+                    <canvas id="canvas"></canvas>
+                </div>
+
+                <div class="buttons">
+                    <button id="startBtn" onclick="startCamera()">▶ Start Camera</button>
+                    <button id="pauseBtn" class="pause" onclick="togglePause()" style="display:none;">⏸ Pause Scan</button>
+                    <button id="switchBtn" class="switch" onclick="switchCamera()" style="display:none;">🔄 Flip Camera</button>
+                    <button id="stopBtn" class="stop" onclick="stopCamera()" style="display:none;">■ Stop Camera</button>
+                    <button type="button" class="switch" onclick="document.getElementById('fileInput').click()">📁 Test Photo</button>
+                    <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleImageUpload(event)" />
+                </div>
+            </div>
+
+            <!-- RESULT CARD -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔍 Live Inspection Result</h2>
+                </div>
+
+                <div id="resultBox" class="result">
+                    <div id="resultTitle" class="result-title unknown">WAITING</div>
+                    <div id="className" class="class-name">Click "Start Camera" to begin continuous scan</div>
+                    <div id="confidence" class="confidence">--</div>
+
+                    <div class="live-counts">
+                        <div class="count-box">
+                            <div id="okCount" class="count-num good">0</div>
+                            <div class="count-label">GOOD IN FRAME</div>
+                        </div>
+                        <div class="count-box">
+                            <div id="defectCount" class="count-num defective">0</div>
+                            <div class="count-label">DEFECTIVE IN FRAME</div>
+                        </div>
+                    </div>
+
+                    <div class="info">
+                        Status: <span id="detectionStatus">Ready</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- INSTRUCTIONS -->
+        <div class="instructions">
+            <h2>📋 Continuous Mode Guide</h2>
+            <ul>
+                <li><b>▶ Start Camera</b> dabane ke baad system lagatar har screw ko detect karega—camera stop karne ki zaroorat nahi hai.</li>
+                <li>Agar aap Hugging Face page ke andar khole hain aur camera block ho raha hai, toh upar <b>Open Direct Fullscreen Link</b> dabayein.</li>
+                <li>Kisi result ko screen par rok kar dekhne ke liye <b>⏸ Pause Scan</b> dabayein (camera chalu rahega).</li>
+                <li><b>OK</b> → <span class="good">GOOD SCREW</span> | <b>scratch / thread / manipulated</b> → <span class="defective">DEFECTIVE SCREW</span></li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            AI Continuous Screw Inspection System
+        </div>
+
+    </div>
+
+<script>
+    let stream = null;
+    let running = false;
+    let paused = false;
+    let processing = false;
+    let starting = false;
+    let currentFacingMode = "environment";
+    let selectedDeviceId = null;
+    let lastFrameTime = performance.now();
+
+    const video = document.getElementById("video");
+    const previewImg = document.getElementById("previewImg");
+    const canvas = document.getElementById("canvas");
+    const overlay = document.getElementById("overlay");
+    const overlayCtx = overlay.getContext("2d");
+
+    function showAlert(msg, showDirectButton = false) {
+        const banner = document.getElementById("alertBanner");
+        const text = document.getElementById("alertText");
+        const btn = document.getElementById("openDirectBtn");
+        text.innerHTML = msg;
+        banner.style.display = "block";
+        btn.style.display = showDirectButton ? "inline-block" : "none";
+    }
+
+    function hideAlert() {
+        document.getElementById("alertBanner").style.display = "none";
+    }
+
+    // =====================================================
+    // CHECK SERVER
+    // =====================================================
+    async function checkServer() {
+        try {
+            const response = await fetch("/status");
+            if (!response.ok) throw new Error("Server error");
+            await response.json();
+
+            document.getElementById("serverStatus").textContent = "ONLINE";
+            document.getElementById("serverStatus").className = "online";
+            document.getElementById("modelStatus").textContent = "LOADED";
+            document.getElementById("modelStatus").className = "online";
+        } catch (error) {
+            document.getElementById("serverStatus").textContent = "OFFLINE";
+            document.getElementById("serverStatus").className = "offline";
+            document.getElementById("modelStatus").textContent = "ERROR";
+            document.getElementById("modelStatus").className = "offline";
+        }
+    }
+
+    // =====================================================
+    // POPULATE CAMERA LIST (LAPTOP / MOBILE WEBCAMS)
+    // =====================================================
+    async function loadCameraList() {
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoInputs = devices.filter(d => d.kind === "videoinput");
+            const select = document.getElementById("cameraSelect");
+
+            if (videoInputs.length > 1) {
+                select.innerHTML = "";
+                videoInputs.forEach((dev, idx) => {
+                    const opt = document.createElement("option");
+                    opt.value = dev.deviceId;
+                    opt.textContent = dev.label || `Camera ${idx + 1}`;
+                    if (selectedDeviceId && dev.deviceId === selectedDeviceId) {
+                        opt.selected = true;
+                    }
+                    select.appendChild(opt);
+                });
+                select.style.display = "inline-block";
+            }
+        } catch (e) {
+            console.warn("Could not enumerate cameras:", e);
+        }
+    }
+
+    async function onCameraSelectChange() {
+        const select = document.getElementById("cameraSelect");
+        selectedDeviceId = select.value;
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        running = false;
+        await startCamera();
+    }
+
+    // =====================================================
+    // START CONTINUOUS CAMERA (WITH AUTOMATIC FALLBACKS)
+    // =====================================================
+    async function startCamera() {
+        if (starting || (running && stream)) return;
+        starting = true;
+        hideAlert();
+
+        // Hide uploaded image preview if shown
+        previewImg.style.display = "none";
+        video.style.display = "block";
+
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                const inIframe = window.self !== window.top;
+                showAlert(
+                    "⚠️ Browser ne is page par camera access block kiya hai (HTTPS ya Direct Link zaroori hai).",
+                    inIframe
+                );
+                starting = false;
+                return;
+            }
+
+            // Try preferred camera first, then fallback to default { video: true }
+            const constraintOptions = [];
+            if (selectedDeviceId) {
+                constraintOptions.push({ video: { deviceId: { exact: selectedDeviceId } }, audio: false });
+            }
+            constraintOptions.push({
+                video: {
+                    facingMode: { ideal: currentFacingMode },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+            constraintOptions.push({ video: true, audio: false });
+
+            let lastErr = null;
+            for (const constraints of constraintOptions) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    if (stream) break;
+                } catch (err) {
+                    lastErr = err;
+                    // If user explicitly denied permission, don't retry further
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        throw err;
+                    }
+                }
+            }
+
+            if (!stream) {
+                throw lastErr || new Error("Camera stream nahi mil saka.");
+            }
+
+            video.srcObject = stream;
+
+            // Safely trigger playback without letting AbortError break execution
+            try {
+                await video.play();
+            } catch (playErr) {
+                console.warn("Video autoplay handled:", playErr);
+            }
+
+            running = true;
+            paused = false;
+            processing = false;
+
+            updateButtonsState(true);
+            updateScanBadge(true, false);
+            document.getElementById("detectionStatus").textContent = "Scanning continuously...";
+
+            await loadCameraList();
+            detectLoop();
+        } catch (error) {
+            console.error("Camera error:", error);
+            const inIframe = window.self !== window.top;
+            let hint = "";
+            if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+                hint = inIframe
+                    ? "Hugging Face iframe mein camera block ho raha hai. Neeche button dabakar direct link kholein aur Allow karein."
+                    : "Browser address bar ke lock icon par click karke Camera permission <b>Allow</b> karein.";
+            } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+                hint = "Is device mein koi camera nahi mila. Aap <b>📁 Test Photo</b> button se image upload karke bhi test kar sakte hain.";
+            } else if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+                hint = "Camera kisi doosri app (Zoom/Meet/Camera app) mein use ho raha hai. Use band karke dubara try karein.";
+            } else {
+                hint = error.message;
+            }
+
+            showAlert(`❌ Camera start nahi hua (${error.name}): ${hint}`, inIframe);
+        } finally {
+            starting = false;
+        }
+    }
+
+    // =====================================================
+    // SWITCH FRONT / BACK CAMERA
+    // =====================================================
+    async function switchCamera() {
+        selectedDeviceId = null;
+        currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        running = false;
+        await startCamera();
+    }
+
+    // =====================================================
+    // PAUSE / RESUME SCAN WITHOUT STOPPING CAMERA
+    // =====================================================
+    function togglePause() {
+        if (!running) return;
+        paused = !paused;
+
+        const pauseBtn = document.getElementById("pauseBtn");
+        if (paused) {
+            pauseBtn.textContent = "▶ Resume Scan";
+            updateScanBadge(true, true);
+            document.getElementById("detectionStatus").textContent = "Scan Paused (Camera Live)";
+        } else {
+            pauseBtn.textContent = "⏸ Pause Scan";
+            updateScanBadge(true, false);
+            document.getElementById("detectionStatus").textContent = "Scanning continuously...";
+            detectLoop();
+        }
+    }
+
+    // =====================================================
+    // STOP CAMERA
+    // =====================================================
+    function stopCamera() {
+        running = false;
+        paused = false;
+        processing = false;
+        starting = false;
+
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+
+        video.srcObject = null;
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+
+        updateButtonsState(false);
+        updateScanBadge(false, false);
+        document.getElementById("fpsLabel").textContent = "0.0 FPS";
+
+        const resultBox = document.getElementById("resultBox");
+        resultBox.className = "result";
+
+        document.getElementById("resultTitle").textContent = "WAITING";
+        document.getElementById("resultTitle").className = "result-title unknown";
+        document.getElementById("className").textContent = "Start Camera dabakar continuous scan shuru karein";
+        document.getElementById("confidence").textContent = "--";
+        document.getElementById("okCount").textContent = "0";
+        document.getElementById("defectCount").textContent = "0";
+        document.getElementById("detectionStatus").textContent = "Stopped";
+    }
+
+    function updateButtonsState(isLive) {
+        document.getElementById("startBtn").style.display = isLive ? "none" : "block";
+        document.getElementById("pauseBtn").style.display = isLive ? "block" : "none";
+        document.getElementById("pauseBtn").textContent = "⏸ Pause Scan";
+        document.getElementById("switchBtn").style.display = isLive ? "block" : "none";
+        document.getElementById("stopBtn").style.display = isLive ? "block" : "none";
+    }
+
+    function updateScanBadge(isLive, isPaused) {
+        const dot = document.getElementById("scanDot");
+        const text = document.getElementById("scanStatusText");
+        if (!isLive) {
+            dot.className = "dot paused";
+            text.textContent = "Camera Off";
+        } else if (isPaused) {
+            dot.className = "dot paused";
+            text.textContent = "Scan Paused";
+        } else {
+            dot.className = "dot";
+            text.textContent = "Live Continuous Scan";
+        }
+    }
+
+    // =====================================================
+    // CONTINUOUS NON-BLOCKING DETECTION LOOP
+    // =====================================================
+    async function detectLoop() {
+        if (!running || paused) return;
+
+        if (!processing && video.readyState >= 2 && video.videoWidth > 0) {
+            processing = true;
+
+            const maxDim = 640;
+            const scale = Math.min(1, maxDim / video.videoWidth);
+            const targetW = Math.round(video.videoWidth * scale);
+            const targetH = Math.round(video.videoHeight * scale);
+
+            if (canvas.width !== targetW || canvas.height !== targetH) {
+                canvas.width = targetW;
+                canvas.height = targetH;
+            }
+
+            if (overlay.width !== targetW || overlay.height !== targetH) {
+                overlay.width = targetW;
+                overlay.height = targetH;
+            }
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, targetW, targetH);
+
+            try {
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.78));
+
+                if (blob && running && !paused) {
+                    const formData = new FormData();
+                    formData.append("file", blob, "frame.jpg");
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+                    const response = await fetch("/compare", {
+                        method: "POST",
+                        body: formData,
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (response.ok && running && !paused) {
+                        const data = await response.json();
+                        showResult(data);
+
+                        const now = performance.now();
+                        const fps = 1000 / Math.max(1, now - lastFrameTime);
+                        lastFrameTime = now;
+                        document.getElementById("fpsLabel").textContent = fps.toFixed(1) + " FPS";
+                    }
+                }
+            } catch (error) {
+                if (error.name !== "AbortError") {
+                    console.error("Frame skipped:", error);
+                }
+            } finally {
+                processing = false;
+            }
+        }
+
+        if (running && !paused) {
+            setTimeout(detectLoop, 80);
+        }
+    }
+
+    // =====================================================
+    // OPTIONAL: TEST WITH UPLOADED PHOTO
+    // =====================================================
+    async function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (running) stopCamera();
+        hideAlert();
+
+        const imgUrl = URL.createObjectURL(file);
+        previewImg.onload = async () => {
+            video.style.display = "none";
+            previewImg.style.display = "block";
+            overlay.width = previewImg.naturalWidth;
+            overlay.height = previewImg.naturalHeight;
+
+            const formData = new FormData();
+            formData.append("file", file, file.name);
+
+            document.getElementById("detectionStatus").textContent = "Analyzing photo...";
+            try {
+                const response = await fetch("/compare", { method: "POST", body: formData });
+                const data = await response.json();
+                showResult(data);
+            } catch (e) {
+                showAlert("Photo analysis error: " + e.message);
+            }
+        };
+        previewImg.src = imgUrl;
+        event.target.value = "";
+    }
+
+    // =====================================================
+    // DRAW ALL DETECTED SCREWS ON OVERLAY
+    // =====================================================
+    function drawBoundingBoxes(data) {
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+
+        const list = (data.detections && data.detections.length > 0)
+            ? data.detections
+            : (data.detected && data.box ? [data] : []);
+
+        if (list.length === 0) return;
+
+        list.forEach(det => {
+            if (!det.box) return;
+            const [x1, y1, x2, y2] = det.box;
+            const boxWidth = x2 - x1;
+            const boxHeight = y2 - y1;
+            const isGood = det.status === "GOOD";
+            const color = isGood ? "#39d98a" : "#ff5c5c";
+
+            overlayCtx.strokeStyle = color;
+            overlayCtx.lineWidth = Math.max(3, Math.round(overlay.width / 200));
+            overlayCtx.strokeRect(x1, y1, boxWidth, boxHeight);
+
+            const label = `${det.class} ${det.confidence}%`;
+            const fontSize = Math.max(14, Math.round(overlay.width / 40));
+            overlayCtx.font = `bold ${fontSize}px Arial`;
+            const textWidth = overlayCtx.measureText(label).width;
+            const labelHeight = fontSize + 8;
+            const labelY = y1 - labelHeight < 0 ? y1 : y1 - labelHeight;
+
+            overlayCtx.fillStyle = color;
+            overlayCtx.fillRect(x1, labelY, textWidth + 12, labelHeight);
+
+            overlayCtx.fillStyle = "#061426";
+            overlayCtx.fillText(label, x1 + 6, labelY + fontSize);
+        });
+    }
+
+    // =====================================================
+    // UPDATE RESULT PANEL
+    // =====================================================
+    function showResult(data) {
+        const resultBox = document.getElementById("resultBox");
+        const title = document.getElementById("resultTitle");
+        const className = document.getElementById("className");
+        const confidence = document.getElementById("confidence");
+        const detectionStatus = document.getElementById("detectionStatus");
+
+        drawBoundingBoxes(data);
+
+        if (!data.detected) {
+            resultBox.className = "result";
+            title.textContent = "SCANNING...";
+            title.className = "result-title unknown";
+            className.textContent = "Screw camera ke saamne layein";
+            confidence.textContent = "--";
+            document.getElementById("okCount").textContent = "0";
+            document.getElementById("defectCount").textContent = "0";
+            detectionStatus.textContent = running ? "Live - No screw in frame" : "No screw in photo";
+            return;
+        }
+
+        const detections = data.detections || [data];
+        let okTotal = 0;
+        let defectTotal = 0;
+        detections.forEach(d => {
+            if (d.status === "GOOD") okTotal++;
+            else defectTotal++;
+        });
+
+        document.getElementById("okCount").textContent = okTotal;
+        document.getElementById("defectCount").textContent = defectTotal;
+
+        if (defectTotal > 0) {
+            resultBox.className = "result border-defective";
+            title.textContent = "❌ DEFECTIVE SCREW";
+            title.className = "result-title defective";
+        } else {
+            resultBox.className = "result border-good";
+            title.textContent = "✅ GOOD SCREW";
+            title.className = "result-title good";
+        }
+
+        className.textContent = "Primary: " + data.class + (detections.length > 1 ? ` (+${detections.length - 1} more)` : "");
+        confidence.textContent = "Confidence: " + data.confidence + "%";
+        detectionStatus.textContent = `${running ? "Live" : "Photo"} (${detections.length} screw detected)`;
+    }
+
+    // =====================================================
+    // INITIALIZE ON LOAD
+    // =====================================================
+    checkServer();
+    if (window.self !== window.top) {
+        showAlert(
+            "ℹ️ Aap yeh app Hugging Face ke wrapper frame ke andar dekh rahe hain. Camera use karne ke liye direct fullscreen link kholein:",
+            true
+        );
+    }
+</script>
+
+</body>
+</html>
